@@ -15,7 +15,7 @@ class GalleryScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text('Galeria de Imagens'),
-        backgroundColor: Colors.pink,
+        backgroundColor: Colors.pink.shade300,
       ),
       
       body: Container(
@@ -24,8 +24,8 @@ class GalleryScreen extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.red,   
-              Colors.green,    
+                   Colors.pink.shade50,
+                   Colors.pink.shade100,
             ],
           ),
         ),

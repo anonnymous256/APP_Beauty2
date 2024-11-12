@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'dart:typed_data';
 import 'galeria.dart';
 
 void main() {
@@ -15,7 +18,7 @@ class HairstyleChangerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Hairstyle Changerr',
+      title: 'Mudar Cabelo',
       theme: ThemeData(
         primarySwatch: Colors.pink,
         scaffoldBackgroundColor: Colors.white,
@@ -45,6 +48,7 @@ class _HairstyleChangerScreenState extends State<HairstyleChangerScreen> {
   String? _imageUrl;
   String _selectedStyle = '';
   final List<String> _savedImages = [];
+  bool _isLoading = false;
   
 
   final List<EstilosCabelo> _EstilosCabeloOptions = [
@@ -131,7 +135,7 @@ class _HairstyleChangerScreenState extends State<HairstyleChangerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Imagem adicionada à lista com sucesso!'),
-          duration: Duration(seconds: 2),
+          duration: Duration(microseconds: 500),
         ),
       );
     } else {
@@ -144,14 +148,61 @@ class _HairstyleChangerScreenState extends State<HairstyleChangerScreen> {
     }
   }
 
+Future<void> _baixarImagem(String imageUrl, BuildContext context) async {
+  try {
+    // Verifique se o dispositivo é Android 11 (API 30) ou superior
+    PermissionStatus status;
+    if (Platform.isAndroid && (await _getAndroidVersion() >= 30)) {
+      status = await Permission.manageExternalStorage.request();
+    } else {
+      // Para Android abaixo do 11, solicita WRITE_EXTERNAL_STORAGE
+      status = await Permission.storage.request();
+    }
+    if (status == PermissionStatus.granted) {
+      print('Permissão concedida. Baixando imagem...');
+      final response = await http.get(Uri.parse(imageUrl));
+      if (response.statusCode == 200) {
+        final result = await ImageGallerySaver.saveImage(
+          Uint8List.fromList(response.bodyBytes),
+          quality: 80,
+          name: "imagem_${DateTime.now().millisecondsSinceEpoch}"
+        );
 
+        if (result['isSuccess']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Imagem salva com sucesso na galeria!'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+          print('Imagem salva com sucesso na galeria.');
+        } else {
+          throw Exception('Erro ao salvar a imagem na galeria.');
+        }
+      } else {
+        throw Exception('Erro ao baixar a imagem. Status: ${response.statusCode}');
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Permissão de armazenamento negada.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  } catch (e) {
+    print('Erro ao salvar a imagem: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Erro ao salvar a imagem. Tente novamente.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+}
 Future<int> _getAndroidVersion() async {
   return int.parse((await Process.run('getprop', ['ro.build.version.sdk'])).stdout.toString().trim());
 }
-
-
-
-
 
   // Envia a imagem para a API e obtem o resultado
   Future<void> _EnviarImagem() async {
@@ -165,10 +216,14 @@ Future<int> _getAndroidVersion() async {
       return;
     }
 
+    setState(() {
+      _isLoading = true;
+    });
+
     final url = Uri.parse(
         'https://hairstyle-changer-pro.p.rapidapi.com/facebody/editing/hairstyle-pro');
     final headers = {
-      'X-Rapidapi-Key': '8079d63219msh1992ba512dcacdap10779djsndc05125d4009',
+      'X-Rapidapi-Key': 'a1e8bdd13fmshcf60d36565b7936p14c84djsn8aedd546846f',
       'X-Rapidapi-Host': 'hairstyle-changer-pro.p.rapidapi.com',
     };
 
@@ -217,6 +272,10 @@ Future<int> _getAndroidVersion() async {
           duration: Duration(seconds: 2),
         ),
       );
+    }finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -236,7 +295,7 @@ Future<int> _getAndroidVersion() async {
       final url = Uri.parse(
           'https://hairstyle-changer-pro.p.rapidapi.com/api/rapidapi/query-async-task-result?task_id=$_taskId');
       final headers = {
-        'X-Rapidapi-Key': '8079d63219msh1992ba512dcacdap10779djsndc05125d4009',
+        'X-Rapidapi-Key': 'a1e8bdd13fmshcf60d36565b7936p14c84djsn8aedd546846f',
         'X-Rapidapi-Host': 'hairstyle-changer-pro.p.rapidapi.com',
       };
 
@@ -250,8 +309,9 @@ Future<int> _getAndroidVersion() async {
                 decodedData['data']['images'] != null) {
               setState(() {
                 _imageUrl = decodedData['data']['images'][0];
+                 _savedImages.add(_imageUrl!);  
               });
-              timer.cancel(); // cancela o temporizadro
+              timer.cancel(); 
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -340,7 +400,8 @@ Future<int> _getAndroidVersion() async {
     );
   }
 
-  @override
+ @override
+@override
 Widget build(BuildContext context) {
   return Scaffold(
     appBar: AppBar(
@@ -352,94 +413,97 @@ Widget build(BuildContext context) {
       ),
       title: Text('Mudança de Cabelo'),
       centerTitle: true,
-      backgroundColor: Colors.pink,
+      backgroundColor: Colors.pink.shade300,
       elevation: 4,
     ),
-    extendBody: true,
     body: Container(
+      width: double.infinity,
       height: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
           colors: [
-            Color.fromARGB(255, 254, 238, 238),
-            Color.fromARGB(255, 254, 238, 238),
+            Colors.pink.shade50,
+            Colors.pink.shade100, 
           ],
+          begin: Alignment.topLeft,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0), 
-        child: SingleChildScrollView(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Center(
-                child: Container(
-                  width: 200,
-                  height: 200,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.pink.shade400, width: 3),
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
+              Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.pink.shade200, width: 3),
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: _selectedImage != null
+                      ? Image.file(
+                          _selectedImage!,
+                          fit: BoxFit.cover,
+                        )
+                      : Image.asset(
+                          'lib/assets/img/selecione3.webp',
+                          fit: BoxFit.cover,
+                        ),
+                ),
+              ),
+              SizedBox(height: 20),
+              if (_isLoading) 
+                CircularProgressIndicator() 
+              else
+                Column(
+                  children: [
+                    Text(
+                      'Selecione um estilo de cabelo:',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.pink.shade600,
                       ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: _selectedImage != null
-                        ? Image.file(
-                            _selectedImage!,
-                            fit: BoxFit.cover,
-                          )
-                        : Image.asset(
-                            'lib/assets/img/selecione3.webp',
-                            fit: BoxFit.cover,
-                          ),
-                  ),
+                    ),
+                    SizedBox(height: 10),
+                    _buildButton(
+                      text: 'Escolher Estilo',
+                      color: Colors.pink.shade300, 
+                      onPressed: _showStyleDialog,
+                      textocor: Colors.white,
+                    ),
+                    SizedBox(height: 20),
+                    Divider(thickness: 1, color: Colors.pink.shade200), 
+                    SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildButton(
+                          text: 'Escolher Foto',
+                          color: Colors.pink.shade300,  
+                          onPressed: _EscolherImagem,
+                          textocor: Colors.white,
+                        ),
+                        _buildButton(
+                          text: 'Tirar Foto',
+                          color: Colors.pink.shade300, 
+                          onPressed: _TirarImagem,
+                          textocor: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-              SizedBox(height: 20),
-              Text(
-                'Selecione um estilo de cabelo:',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.pink.shade600,
-                ),
-              ),
-              SizedBox(height: 10),
-              _buildButton(
-                text: 'Escolher Estilo',
-                color: Colors.pink.shade600,
-                onPressed: _showStyleDialog,
-                textocor: Colors.white,
-              ),
-              SizedBox(height: 20),
-              Divider(thickness: 1, color: Colors.pink.shade200),
-              SizedBox(height: 20),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _buildButton(
-                    text: 'Selecione Foto',
-                    color: Colors.pink.shade600,
-                    onPressed: _EscolherImagem,
-                    textocor: Colors.white,
-                  ),
-                  _buildButton(
-                    text: 'Tirar foto',
-                    color: Colors.pink.shade600,
-                    onPressed: _TirarImagem,
-                    textocor: Colors.white,
-                  ),
-                ],
-              ),
               SizedBox(height: 30),
               if (_imageUrl != null)
                 GestureDetector(
@@ -467,84 +531,85 @@ Widget build(BuildContext context) {
                     ),
                     child: Padding(
                       padding: EdgeInsets.all(8.0),
-child: Stack(
-  children: [
-    ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Image.network(
-        _imageUrl!,
-        fit: BoxFit.cover,
-        width: 200,
-        height: 200,
-      ),
-    ),
-    Positioned(
-      bottom: -10,  
-      right: -10,   
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 8,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: IconButton(
-          icon: Icon(
-            Icons.add_circle,
-            color: Colors.pink.shade600,
-            size: 30,
-          ),
-          onPressed: _adicionarImagem,
-        ),
-      ),
-    ),
-  ],
-)
-                    
-
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Stack(
+                          alignment: Alignment.topRight,
+                          children: [
+                            Image.network(
+                              _imageUrl!,
+                              fit: BoxFit.cover,
+                              width: 200,
+                              height: 200,
+                            ),
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              child: GestureDetector(
+                                onTap: () {
+                                  _adicionarImagem();
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 6,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.add_circle,
+                                    color: Colors.pink.shade600,  
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 )
               else
                 Text(
                   'Nenhuma imagem recuperada',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                  style: TextStyle(color: Colors.pink.shade600, fontSize: 16),
                 ),
+              SizedBox(height: 20),
+              _buildButton(
+                text: 'Ver Galeria',
+                color: Colors.pink.shade300,  
+                onPressed: () {
+                  if (_savedImages.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => GalleryScreen(savedImages: _savedImages),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Nenhuma imagem salva para mostrar.'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+                textocor: Colors.white,
+              ),
             ],
           ),
         ),
       ),
     ),
-    bottomNavigationBar: Container(
-      color: Colors.transparent,
-      padding: const EdgeInsets.symmetric(vertical: 16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-         
-          IconButton(
-            icon: Icon(Icons.image_search, color: Colors.pink.shade600),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => GalleryScreen(savedImages: _savedImages)),
-              );
-            },
-            iconSize: 36,
-          ),
-        ],
-      ),
-    ),
   );
 }
-
-
-
 
   // funcao para construir os botoes
   Widget _buildButton(
